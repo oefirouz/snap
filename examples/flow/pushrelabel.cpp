@@ -1,10 +1,37 @@
 // pushrelabelmain.cpp : Defines the entry point for the console application.
 
+#include <cassert>
 #include "stdafx.h"
-#include "agm.h"
-#include "agmfit.h"
+//#include "agm.h"
+//#include "agmfit.h"
+
+
+void net_from_dimacs(PNEANet &g, char *filename) {
+  FILE *f = fopen(filename, "r");
+  if (f == NULL) { printf("Couldn't find file!\n"); return; }
+  int a, b, c, e_id;
+  char z, buf[1024];
+  while (fgets(buf, 1024, f) != NULL) {
+    if (buf[0] == 'a') {
+      sscanf(buf, "%c %d %d %d", &z, &a, &b, &c);
+      if (!g->IsNode(a)) { g->AddNode(a); }
+      if (!g->IsNode(b)) { g->AddNode(b); }
+      e_id = g->AddEdge(a,b);
+      g->AddIntAttrDatE(e_id, c, "capacity");
+    }
+  }
+  fclose(f);
+}
 
 int main(int argc, char* argv[]) {
+  PNEANet g = PNEANet::New();
+  char f_name[] = "Tests/rmflong_16_4_1024_4608.txt";
+  net_from_dimacs(g, f_name);
+  g->Dump();
+
+
+
+
   //Env = TEnv(argc, argv, TNotify::StdNotify);
   //Env.PrepArgs(TStr::Fmt("cpm. build: %s, %s. Time: %s", __TIME__, __DATE__, TExeTm::GetCurTm()));
   //TExeTm ExeTm;
