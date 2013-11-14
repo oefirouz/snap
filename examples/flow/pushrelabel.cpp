@@ -4,9 +4,11 @@
 #include "stdafx.h"
 //#include "agm.h"
 //#include "agmfit.h"
+//
+#define INF (1 << 30)
 
 
-void net_from_dimacs(PNEANet &g, char *filename) {
+void net_from_dimacs(PNEANet G, char *filename) {
   FILE *f = fopen(filename, "r");
   if (f == NULL) { printf("Couldn't find file!\n"); return; }
   int a, b, c, e_id;
@@ -14,20 +16,107 @@ void net_from_dimacs(PNEANet &g, char *filename) {
   while (fgets(buf, 1024, f) != NULL) {
     if (buf[0] == 'a') {
       sscanf(buf, "%c %d %d %d", &z, &a, &b, &c);
-      if (!g->IsNode(a)) { g->AddNode(a); }
-      if (!g->IsNode(b)) { g->AddNode(b); }
-      e_id = g->AddEdge(a,b);
-      g->AddIntAttrDatE(e_id, c, "capacity");
+      if (!G->IsNode(a)) { G->AddNode(a); }
+      if (!G->IsNode(b)) { G->AddNode(b); }
+      e_id = G->AddEdge(a,b);
+      G->AddIntAttrDatE(e_id, c, "capacity");
     }
   }
   fclose(f);
 }
 
+
+
+void init_flow(PNEANet G) {
+  int m = G->GetEdges();
+  for (int i = 0; i < m; ++i) {
+    assert(G->IsEdge(m));
+    G->AddIntAttrDatE(i, 0, "flow");
+  }
+}
+
+
+int push_relabel(PNEANet G, int s, int t) { return 0; }
+
+
+int push_dfs_flow(PNEANet G, int s, int t, int *dfs_back) {
+  int cur_node = t;
+  int min_flow = INF;
+  while (cur_node != s) {
+    int prev_node = dfs_back[cur_node];
+    int e_id = G->GetEId(prev_node, cur_node);
+    int exc = G->GetIntAttrDatE(e_id, "capacity") - G->GetIntAttrDatE(e_id, "flow");
+    if (exc < min_flow) { min_flow = exc; }
+    cur_node = prev_node;
+  }
+  cur_node = t;
+  while (cur_node != s) {
+    int prev_node = dfs_back[cur_node];
+    int e_id = G->GetEId(prev_node, cur_node);
+    int cur_flow = G->GetIntAttrDatE(e_id, "flow");
+    G->AddIntAttrDatE(e_id, cur_flow + min_flow, "flow");
+    cur_node = prev_node;
+  }
+  return min_flow;
+}
+
+
+int residual_dfs(PNEANet G, int s, int t, int *dfs_node, int *dfs_back, int *visited) {
+  for (int i = 0; i <= G->GetNodes(); ++i) { visited[i] = 0; }
+  int stack_pos = 0;
+  dfs_node[0] = s;
+  visited[s] = 1;
+
+  while (stack_pos >= 0) {
+    int cur_node = dfs_node[stack_pos--];
+    TNEANet::TNodeI NI = G->GetNI(cur_node);
+    for (int i = 0; i < NI.GetOutDeg(); ++i) {
+      int n_id = NI.GetOutNId(i);
+      int e_id = G->GetEId(cur_node, n_id);
+      int exc = G->GetIntAttrDatE(e_id, "capacity") - G->GetIntAttrDatE(e_id, "flow");
+      if (visited[n_id] == 0 && exc > 0) {
+        dfs_back[n_id] = cur_node;
+        if (n_id == t) { return push_dfs_flow(G, s, t, dfs_back); }
+        visited[n_id] = 1;
+        dfs_node[++stack_pos] = n_id;
+      }
+    }
+  }
+  return 0;
+}
+
+
+
+int ford_fulkerson(PNEANet G, int s, int t) {
+  if (s == t) { return INF; }
+  int *dfs_node = (int *) malloc(sizeof(int) * (G->GetNodes() + 1));
+  int *dfs_back = (int *) malloc(sizeof(int) * (G->GetNodes() + 1));
+  int *visited = (int *) malloc(sizeof(int) * (G->GetNodes() + 1));
+  init_flow(G);
+  int flow = 0;
+  int old_flow = 1;
+  while (flow != old_flow) {
+    old_flow = flow;
+    flow += residual_dfs(G, s, t, dfs_node, dfs_back, visited);
+  }
+
+  printf("%d\n", flow);
+  free(dfs_node);
+  free(dfs_back);
+  free(visited);
+  return 0;
+}
+
+
+
+
 int main(int argc, char* argv[]) {
-  PNEANet g = PNEANet::New();
+  PNEANet G = PNEANet::New();
   char f_name[] = "Tests/rmflong_16_4_1024_4608.txt";
-  net_from_dimacs(g, f_name);
-  g->Dump();
+  net_from_dimacs(G, f_name);
+  ford_fulkerson(G, 1, 512);
+  //printf("%d\n", n);
+  //g->Dump();
 
 
 
