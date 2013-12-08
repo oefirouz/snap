@@ -2,6 +2,7 @@ make all
 
 ./pushrelabel Tests/rmflong_8_64.txt
 ./pushrelabel Tests/rmflong_10_91.txt
+./pushrelabel Tests/rmflong_11_128.txt
 ./pushrelabel Tests/rmflong_13_181.txt
 ./pushrelabel Tests/rmflong_16_256.txt
 ./pushrelabel Tests/rmflong_19_362.txt

@@ -46,24 +46,19 @@ static inline void push(PNEANet G, int u, int v, int *e, int *capacities, int *f
 
 
 static inline void global_relabel(PNEANet G, int t, int *h, int *capacities, int *flows) {
-  //TODO: Change this to avoid the fact that we are using a 1 indexed node
   //TODO: can be done without linear pass, also use a constant buffer
-  //static TSnapQueue<int> node_queue(G->GetNodes());
-  static int *bfs_queue = (int *) calloc(G->GetNodes(), sizeof(int));
+  static int *bfs_queue = (int *) malloc(G->GetNodes()*sizeof(int));
   for (int i = 0; i < G->GetNodes(); ++i) {
-    h[i] = 10000000;
+    h[i] = INF;
   }
   h[t] = 0;
   TNEANet::TNodeI NI = G->GetNI(t);
-  //TSnapQueue<int> node_queue(G->GetNodes());
   int left = 0;
   int right = 1;
-  //node_queue.Push(t);
   bfs_queue[0] = t;
   while (left != right) {
-    int cur_node = bfs_queue[left];//node_queue.Top();
+    int cur_node = bfs_queue[left];
     left++;
-    //node_queue.Pop();
     NI = G->GetNI(cur_node);
     for (int i = 0; i < NI.GetInDeg(); ++i) {
       int prev_node = NI.GetInNId(i);
@@ -71,7 +66,6 @@ static inline void global_relabel(PNEANet G, int t, int *h, int *capacities, int
         int e_id = G->GetEId(prev_node, cur_node);
         if (capacities[e_id] - flows[e_id] > 0) {
           h[prev_node] = h[cur_node] + 1;
-          //node_queue.Push(prev_node);
           bfs_queue[right] = prev_node;
           right++;
         }
@@ -102,8 +96,6 @@ static inline void relabel(PNEANet G, int u, int t, int *h, int *capacities, int
 
 
 int push_relabel(PNEANet G, int s, int t, int *capacities, int *flows) {
-  // Init
-  //init_flow(G);
   int min_height, u, v, n = G->GetNodes();
   int *height = (int *) calloc(n+1, sizeof(int));
   int *excess = (int *) calloc(n+1, sizeof(int));
