@@ -81,7 +81,7 @@ static inline void global_relabel(PNEANet G, int t, int *h, int *capacities, int
 static inline void relabel(PNEANet G, int u, int t, int *h, int *capacities, int *flows) {
   static int counter = 0;
   counter++;
-  if (counter > GLOBAL_UPDATE_FREQ*G->GetNodes()) {
+  if (counter > GLOBAL_UPDATE_FREQ*NUM_NODES) {
     counter = 0;
     global_relabel(G, t, h, capacities, flows);
   }
