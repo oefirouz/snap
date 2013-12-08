@@ -7,6 +7,8 @@
 #define MIN(A,B) ((A < B) ? (A) : (B))
 #define GLOBAL_UPDATE_FREQ 0.5
 
+static int NUM_NODES;
+
 void net_from_dimacs(PNEANet G, char *filename, int **capacities, int **flows) {
   FILE *f = fopen(filename, "r");
   if (f == NULL) { printf("Couldn't find file!\n"); return; }
@@ -15,6 +17,7 @@ void net_from_dimacs(PNEANet G, char *filename, int **capacities, int **flows) {
   while (fgets(buf, 1024, f) != NULL) {
     if (buf[0] == 'p') {
       sscanf(buf, "p max %d %d", &max_nodes, &max_edges);
+      NUM_NODES = max_nodes;
       *capacities = (int *) calloc(2*max_edges, sizeof(int));
       *flows = (int *) calloc(2*max_edges, sizeof(int));
     } else if (buf[0] == 'a') {
@@ -48,8 +51,8 @@ static inline void push(PNEANet G, int u, int v, int *e, int *capacities, int *f
 static inline void global_relabel(PNEANet G, int t, int *h, int *capacities, int *flows) {
   //TODO: can be done without linear pass, also use a constant buffer
   static int *bfs_queue = (int *) malloc(G->GetNodes()*sizeof(int));
-  for (int i = 0; i < G->GetNodes(); ++i) {
-    h[i] = INF;
+  for (int i = 0; i < NUM_NODES; ++i) {
+    h[i] = NUM_NODES;//INF;
   }
   h[t] = 0;
   TNEANet::TNodeI NI = G->GetNI(t);
@@ -96,15 +99,16 @@ static inline void relabel(PNEANet G, int u, int t, int *h, int *capacities, int
 
 
 int push_relabel(PNEANet G, int s, int t, int *capacities, int *flows) {
-  int min_height, u, v, n = G->GetNodes();
-  int *height = (int *) calloc(n+1, sizeof(int));
-  int *excess = (int *) calloc(n+1, sizeof(int));
-  bool *in_queue = (bool *) calloc(n+1, sizeof(bool));
+  int min_height, u, v;
+  int *height = (int *) calloc(NUM_NODES, sizeof(int));
+  int *excess = (int *) calloc(NUM_NODES, sizeof(int));
+  bool *in_queue = (bool *) calloc(NUM_NODES, sizeof(bool));
+
   global_relabel(G, t, height, capacities, flows);
-  height[s] = n;
+  height[s] = NUM_NODES;
   excess[s] = INF;
   TNEANet::TNodeI NI = G->GetNI(s);
-  TSnapQueue<int> node_queue(n);
+  TSnapQueue<int> node_queue(NUM_NODES);
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
     v = NI.GetOutNId(i);
     push(G, s, v, excess, capacities, flows);
@@ -152,18 +156,18 @@ int main(int argc, char* argv[]) {
 
   int *capacities, *flows;
 
-  clock_t start_init = clock();
+  //clock_t start_init = clock();
   net_from_dimacs(G, filename, &capacities, &flows);
-  clock_t end_init = clock();
+  //clock_t end_init = clock();
 
-  printf("%s\t", filename);
-  printf("Init:%f\t", ((float)end_init - start_init)/CLOCKS_PER_SEC);
-  fflush(stdout);
+  //printf("%s\t", filename);
+  //printf("Init:%f\t", ((float)end_init - start_init)/CLOCKS_PER_SEC);
+  //fflush(stdout);
   clock_t start = clock();
   int flow = push_relabel(G, 0, G->GetNodes()-1, capacities, flows);
   clock_t end = clock();
-  printf("Flow:%d\t", flow);
-  printf("Time:%f\n", ((float)end - start)/CLOCKS_PER_SEC);
+  printf("%d\t", flow);
+  printf("%f\t", ((float)end - start)/CLOCKS_PER_SEC);
 
   return 0;
 }
