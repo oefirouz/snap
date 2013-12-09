@@ -13,7 +13,7 @@ static int num_nodes = 0;
 static int num_edges = 0;
 
 static int max_active = 0;
-//static int min_active = 0;
+static int min_active = 0;
 
 typedef struct node {
   int excess;
@@ -53,7 +53,7 @@ static inline void add_to_active_layer(int i) {
   int layer = nodes[i].height;
   nodes[i].next_active = layers[layer].first_active;
   layers[layer].first_active = i;
-  //if (min_active > nodes[i].height) { min_active = nodes[i].height; }
+  if (min_active > nodes[i].height) { min_active = nodes[i].height; }
   if (max_active < nodes[i].height) { max_active = nodes[i].height; }
 }
 
@@ -64,13 +64,12 @@ static inline void remove_from_active_layer(int i) {
 }
 
 
-void add_to_inactive_layer(int i) {
+/*void add_to_inactive_layer(int i) {
   int layer = nodes[i].height;
   nodes[i].next_inactive = layers[layer].first_inactive;
-  if (layers[layer].first_inactive >= 0) {
-    nodes[layers[layer].first_inactive].prev_inactive = i;
+  if (nodes[i].next_inactive >= 0) {
+    nodes[nodes[i].next_inactive].prev_inactive = i;
   }
-  nodes[i].prev_inactive = -1; // flag indicating layer struct
   layers[layer].first_inactive = i;
 }
 
@@ -85,12 +84,8 @@ void remove_from_inactive_layer(int i) {
 
   if (nodes[i].next_inactive >= 0) {
     nodes[nodes[i].next_inactive].prev_inactive = nodes[i].prev_inactive;
-  } else {
   }
-  if (nodes[i].next_inactive >= 0) {
-      nodes[nodes[i].next_inactive].prev_inactive = -1;
-    }
-}
+}*/
 
 
 void net_from_dimacs(char *filename) {
@@ -145,6 +140,7 @@ static inline void global_relabel() {
   }
 
   max_active = 0;
+  min_active = num_nodes; //TODO: maybe min active isn't very good
 
   nodes[t].height = 0;
   TNEANet::TNodeI NI = G->GetNI(t);
@@ -191,6 +187,19 @@ static inline void relabel(int u) {
 }
 
 
+static inline void gap(int missing_height) {
+  for (int i = missing_height + 1; i < num_nodes; ++i) {
+    int cur = layers[i].first_inactive;
+    while (cur >= 0) {
+      nodes[cur].height = num_nodes;
+      cur = nodes[cur].next_inactive;
+    }
+    layers[i].first_inactive = -1;
+  }
+  max_active = missing_height - 1;
+}
+
+
 static inline void discharge(int u) {
   TNEANet::TNodeI NI = G->GetNI(u);
   while (1) {
@@ -212,7 +221,11 @@ static inline void discharge(int u) {
     }
 
     if (nodes[u].excess > 0) {
+      int old_height = nodes[u].height;
       relabel(u);
+      if (layers[old_height].first_inactive < 0 && layers[old_height].first_active < 0) {
+        gap(old_height);
+      }
       //TODO: Gap
       if (nodes[u].height == num_nodes) { //IMPORTANT
         break;
@@ -252,22 +265,31 @@ int push_relabel() {
     nodes[i].next_active = -1;
   }
 
-  //min_active = num_nodes;
+  min_active = num_nodes;
   max_active = 0;
 
   nodes[s].height = num_nodes;
   nodes[s].excess = INF;
 
   TNEANet::TNodeI NI = G->GetNI(s);
-  //TSnapQueue<int> node_queue(num_nodes);
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
     v = NI.GetOutNId(i);
     push(s, v);
     add_to_active_layer(v);
   }
 
+  for (int i = 0; i < num_nodes; ++i) {
+    if (i != s && i != t) {
+      if (nodes[i].excess > 0) {
+        add_to_active_layer(i);
+      } else {
+        //add_to_inactive_layer(i);
+      }
+    }
+  }
 
-  while (max_active > 0) {
+
+  while (max_active >= min_active) {
     if (layers[max_active].first_active < 0) {
       max_active--;
     } else {
