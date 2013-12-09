@@ -15,6 +15,7 @@ static int nm_refresh = 0;
 
 static int max_active = 0;
 static int min_active = 0;
+static int max_distance = 0;
 
 typedef struct node {
   int excess;
@@ -65,7 +66,7 @@ static inline void remove_from_active_layer(int i) {
 }
 
 
-/*void add_to_inactive_layer(int i) {
+static inline void add_to_inactive_layer(int i) {
   int layer = nodes[i].height;
   nodes[i].next_inactive = layers[layer].first_inactive;
   if (nodes[i].next_inactive >= 0) {
@@ -75,7 +76,7 @@ static inline void remove_from_active_layer(int i) {
 }
 
 
-void remove_from_inactive_layer(int i) {
+static inline void remove_from_inactive_layer(int i) {
   int layer = nodes[i].height;
   if (layers[layer].first_inactive == i) {
     layers[layer].first_inactive = nodes[i].next_inactive;
@@ -86,7 +87,7 @@ void remove_from_inactive_layer(int i) {
   if (nodes[i].next_inactive >= 0) {
     nodes[nodes[i].next_inactive].prev_inactive = nodes[i].prev_inactive;
   }
-}*/
+}
 
 
 void net_from_dimacs(char *filename) {
@@ -136,11 +137,12 @@ static inline void push(int u, int v) {
 static inline void global_relabel() {
   static int *bfs_queue = (int *) malloc(G->GetNodes()*sizeof(int));
   for (int i = 0; i < num_nodes; ++i) {
-    nodes[i].height = num_nodes; //INF;
+    nodes[i].height = num_nodes;
     layers[i].first_active = -1;
+    layers[i].first_inactive = -1;
   }
 
-  max_active = 0;
+  max_distance = max_active = 0;
   min_active = num_nodes; //TODO: maybe min active isn't very good
 
   nodes[t].height = 0;
@@ -161,10 +163,13 @@ static inline void global_relabel() {
           bfs_queue[right] = prev_node;
           right++;
 
+          if (max_distance < nodes[prev_node].height) {
+            max_distance = nodes[prev_node].height;
+          }
           if (nodes[prev_node].excess > 0) {
             add_to_active_layer(prev_node);
           } else {
-
+            add_to_inactive_layer(prev_node);
           }
         }
       }
@@ -192,15 +197,21 @@ static inline void relabel(int u) {
 
 
 static inline void gap(int missing_height) {
-  for (int i = missing_height + 1; i < num_nodes; ++i) {
+  /*static int j = 0;
+  if (j == 1) { return; }
+  j = 1;*/
+  for (int i = missing_height + 1; i < max_distance; ++i) {
+    //printf("outer loop %d\n", i);
     int cur = layers[i].first_inactive;
     while (cur >= 0) {
+      //printf("inner loop cur %d\n", cur);
       nodes[cur].height = num_nodes;
       cur = nodes[cur].next_inactive;
     }
     layers[i].first_inactive = -1;
   }
   max_active = missing_height - 1;
+  max_distance = max_active;
 }
 
 
@@ -213,7 +224,7 @@ static inline void discharge(int u) {
       if (arcs[e_id].capacity - arcs[e_id].flow > 0) {
         if (nodes[u].height == nodes[v].height + 1) {
           if (v != s && v != t && nodes[v].excess == 0) {
-            //TODO remove_from_inactive_layer(v);
+            remove_from_inactive_layer(v);
             add_to_active_layer(v);
           }
           push(u, v);
@@ -228,14 +239,13 @@ static inline void discharge(int u) {
       int old_height = nodes[u].height;
       relabel(u);
       if (layers[old_height].first_inactive < 0 && layers[old_height].first_active < 0) {
-        gap(old_height);
+        //gap(old_height);
       }
-      //TODO: Gap
       if (nodes[u].height == num_nodes) { //IMPORTANT
         break;
       }
     } else {
-      //TODO: add_to_inactive_layer(u);
+      add_to_inactive_layer(u);
       break;
     }
   }
@@ -261,14 +271,15 @@ int push_relabel() {
 
   for (int i = 0; i < num_nodes + 1; ++i) {
     layers[i].first_active = -1;
-    //TODO: layers[i].first_inactive = -1;
+    layers[i].first_inactive = -1;
   }
   for (int i = 0; i < num_nodes; ++i) {
-    //TODO nodes[i].prev_inactive = -1;
-    //TODO nodes[i].next_inactive = -1;
+    nodes[i].prev_inactive = -1;
+    nodes[i].next_inactive = -1;
     nodes[i].next_active = -1;
   }
 
+  max_distance = num_nodes - 1;
   min_active = num_nodes;
   max_active = 0;
 
@@ -279,7 +290,6 @@ int push_relabel() {
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
     v = NI.GetOutNId(i);
     push(s, v);
-    add_to_active_layer(v);
   }
 
   for (int i = 0; i < num_nodes; ++i) {
@@ -287,7 +297,7 @@ int push_relabel() {
       if (nodes[i].excess > 0) {
         add_to_active_layer(i);
       } else {
-        //add_to_inactive_layer(i);
+        add_to_inactive_layer(i);
       }
     }
   }
