@@ -4,7 +4,6 @@
 #include <ctime>
 
 #define INF (1 << 30)
-#define MIN(A,B) ((A < B) ? (A) : (B))
 
 const static float global_update_freq = 0.5;
 const static int alpha = 6;
@@ -14,7 +13,7 @@ static int num_nodes = 0;
 static int num_edges = 0;
 
 static int max_active = 0;
-static int min_active = 0;
+//static int min_active = 0;
 
 typedef struct node {
   int excess;
@@ -50,16 +49,16 @@ static Node *nodes;
 static Layer *layers;
 
 
-void add_to_active_layer(int i) {
+static inline void add_to_active_layer(int i) {
   int layer = nodes[i].height;
   nodes[i].next_active = layers[layer].first_active;
   layers[layer].first_active = i;
-  if (min_active < nodes[i].height) { min_active = nodes[i].height; }
-  if (max_active > nodes[i].height) { max_active = nodes[i].height; }
+  //if (min_active > nodes[i].height) { min_active = nodes[i].height; }
+  if (max_active < nodes[i].height) { max_active = nodes[i].height; }
 }
 
 
-void remove_from_active_layer(int i) {
+static inline void remove_from_active_layer(int i) {
   int layer = nodes[i].height;
   layers[layer].first_active = nodes[i].next_active;
 }
@@ -68,21 +67,29 @@ void remove_from_active_layer(int i) {
 void add_to_inactive_layer(int i) {
   int layer = nodes[i].height;
   nodes[i].next_inactive = layers[layer].first_inactive;
-  nodes[nodes[i].next_inactive].prev_inactive = i;
-  nodes[i].prev_inactive = -layer; // flag indicating layer struct
+  if (layers[layer].first_inactive >= 0) {
+    nodes[layers[layer].first_inactive].prev_inactive = i;
+  }
+  nodes[i].prev_inactive = -1; // flag indicating layer struct
   layers[layer].first_inactive = i;
 }
 
 
 void remove_from_inactive_layer(int i) {
   int layer = nodes[i].height;
-  if (layers[layer].first_active == i) {
+  if (layers[layer].first_inactive == i) {
     layers[layer].first_inactive = nodes[i].next_inactive;
-    nodes[nodes[i].next_inactive].prev_inactive = -layer;
   } else {
     nodes[nodes[i].prev_inactive].next_inactive = nodes[i].next_inactive;
-    nodes[nodes[i].next_inactive].prev_inactive = nodes[i].prev_inactive;
   }
+
+  if (nodes[i].next_inactive >= 0) {
+    nodes[nodes[i].next_inactive].prev_inactive = nodes[i].prev_inactive;
+  } else {
+  }
+  if (nodes[i].next_inactive >= 0) {
+      nodes[nodes[i].next_inactive].prev_inactive = -1;
+    }
 }
 
 
@@ -120,14 +127,13 @@ static inline void push(int u, int v) {
   int e_id = G->GetEId(u,v);
   int rev_e_id = G->GetEId(v,u);
   int f = arcs[e_id].flow;
-
   int delta = arcs[e_id].capacity - f;
   int ex = nodes[u].excess;
-  int amt = MIN( ex, delta );
-  arcs[e_id].flow = f + amt;
-  arcs[rev_e_id].flow = -(f + amt);
-  nodes[u].excess -= amt;
-  nodes[v].excess += amt;
+  if (ex > delta) { ex = delta; }
+  arcs[e_id].flow = f + ex;
+  arcs[rev_e_id].flow = -(f + ex);
+  nodes[u].excess -= ex;
+  nodes[v].excess += ex;
 }
 
 
@@ -135,7 +141,11 @@ static inline void global_relabel() {
   static int *bfs_queue = (int *) malloc(G->GetNodes()*sizeof(int));
   for (int i = 0; i < num_nodes; ++i) {
     nodes[i].height = num_nodes; //INF;
+    layers[i].first_active = -1;
   }
+
+  max_active = 0;
+
   nodes[t].height = 0;
   TNEANet::TNodeI NI = G->GetNI(t);
   int left = 0;
@@ -153,6 +163,12 @@ static inline void global_relabel() {
           nodes[prev_node].height = nodes[cur_node].height + 1;
           bfs_queue[right] = prev_node;
           right++;
+
+          if (nodes[prev_node].excess > 0) {
+            add_to_active_layer(prev_node);
+          } else {
+
+          }
         }
       }
     }
@@ -175,19 +191,19 @@ static inline void relabel(int u) {
 }
 
 
-static inline void discharge(int u, TSnapQueue<int> &node_queue, bool *in_queue) {
+static inline void discharge(int u) {
   TNEANet::TNodeI NI = G->GetNI(u);
   while (1) {
     for (int i = 0; i < NI.GetOutDeg(); ++i) {
       int v = NI.GetOutNId(i);
       int e_id = G->GetEId(u,v);
       if (arcs[e_id].capacity - arcs[e_id].flow > 0) {
-        if (nodes[u].height > nodes[v].height) {
-          push(u, v);
-          if (in_queue[v] == 0 && v != s && v != t) {
-            in_queue[v] = 1;
-            node_queue.Push(v);
+        if (nodes[u].height == nodes[v].height + 1) {
+          if (v != s && v != t && nodes[v].excess == 0) {
+            //TODO remove_from_inactive_layer(v);
+            add_to_active_layer(v);
           }
+          push(u, v);
           if (nodes[u].excess == 0) {
             break;
           }
@@ -197,7 +213,12 @@ static inline void discharge(int u, TSnapQueue<int> &node_queue, bool *in_queue)
 
     if (nodes[u].excess > 0) {
       relabel(u);
+      //TODO: Gap
+      if (nodes[u].height == num_nodes) { //IMPORTANT
+        break;
+      }
     } else {
+      //TODO: add_to_inactive_layer(u);
       break;
     }
   }
@@ -209,45 +230,54 @@ int push_relabel() {
   int u, v;
 
   nodes = (Node *) calloc(num_nodes, sizeof(Node));
-  /*layers = (Layer *) calloc(num_nodes + 1, sizeof(Layer));
-  for (int i = 0; i <= num_nodes; ++i) {
+  layers = (Layer *) calloc(num_nodes + 1, sizeof(Layer));
+
+
+  for (int i = 0; i < num_nodes; ++i) {
+    nodes[i].height = 1;
+    if (i == s) {
+      nodes[i].height = num_nodes;
+    } else if (i == t) {
+      nodes[i].height = 0;
+    }
+  }
+
+  for (int i = 0; i < num_nodes + 1; ++i) {
     layers[i].first_active = -1;
-    layers[i].first_inactive = -1;
+    //TODO: layers[i].first_inactive = -1;
   }
   for (int i = 0; i < num_nodes; ++i) {
-    nodes[i].prev_inactive = -1;
-    nodes[i].next_inactive = -1;
+    //TODO nodes[i].prev_inactive = -1;
+    //TODO nodes[i].next_inactive = -1;
     nodes[i].next_active = -1;
-  }*/
+  }
 
-  bool *in_queue = (bool *) calloc(num_nodes, sizeof(bool)); //TODO: Deprecated
-
-  min_active = num_nodes;
+  //min_active = num_nodes;
   max_active = 0;
 
-  //global_relabel(); // CANNOT DO AFTER HEIGHT/EXCESS
   nodes[s].height = num_nodes;
   nodes[s].excess = INF;
 
   TNEANet::TNodeI NI = G->GetNI(s);
-  TSnapQueue<int> node_queue(num_nodes);
+  //TSnapQueue<int> node_queue(num_nodes);
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
     v = NI.GetOutNId(i);
     push(s, v);
-    node_queue.Push(v);
-    in_queue[v] = 1;
+    add_to_active_layer(v);
   }
 
-  //while (max_active >= min_active) {
 
-  while (node_queue.Empty() == 0) {
-    u = node_queue.Top();
-    in_queue[u] = 0;
-    node_queue.Pop();
-    discharge(u, node_queue, in_queue);
-    if (work_since_update > global_update_freq*num_nodes) {
-      work_since_update = 0;
-      global_relabel();
+  while (max_active > 0) {
+    if (layers[max_active].first_active < 0) {
+      max_active--;
+    } else {
+      u = layers[max_active].first_active;
+      remove_from_active_layer(u);
+      discharge(u);
+      if (work_since_update > global_update_freq*num_nodes) {
+        work_since_update = 0;
+        global_relabel();
+      }
     }
   }
 
