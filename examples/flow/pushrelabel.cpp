@@ -11,6 +11,7 @@ const static int beta = 12;
 
 static int num_nodes = 0;
 static int num_edges = 0;
+static int nm_refresh = 0;
 
 static int max_active = 0;
 static int min_active = 0;
@@ -173,17 +174,20 @@ static inline void global_relabel() {
 
 
 static inline void relabel(int u) {
-  work_since_update++;
+  work_since_update += beta;
   TNEANet::TNodeI NI = G->GetNI(u);
   int min_neighbor = INF;
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
+    ++work_since_update;
     int v = NI.GetOutNId(i);
     int e_id = G->GetEId(u,v);
     if (arcs[e_id].capacity - arcs[e_id].flow > 0) {
       if (min_neighbor > nodes[v].height) { min_neighbor = nodes[v].height; }
     }
   }
-  nodes[u].height = min_neighbor + 1;
+  if (min_neighbor < num_nodes - 1) {
+    nodes[u].height = min_neighbor + 1;
+  }
 }
 
 
@@ -296,7 +300,7 @@ int push_relabel() {
       u = layers[max_active].first_active;
       remove_from_active_layer(u);
       discharge(u);
-      if (work_since_update > global_update_freq*num_nodes) {
+      if (work_since_update*global_update_freq > nm_refresh) {
         work_since_update = 0;
         global_relabel();
       }
@@ -317,6 +321,7 @@ int main(int argc, char* argv[]) {
   net_from_dimacs(filename);
   s = 0;
   t = num_nodes - 1;
+  nm_refresh = alpha*num_nodes + num_edges/2;
 
   clock_t start = clock();
   int flow = push_relabel();
