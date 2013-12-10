@@ -17,12 +17,16 @@ static int max_active;
 static int min_active;
 static int max_distance;
 
+#include <list>
+#include <deque>
+
 typedef struct node {
   int excess;
   int height;
   int next_active;
-  int next_inactive;
-  int prev_inactive;
+  std::list<int>::iterator inactive_ptr;
+  ///int next_inactive;
+  //int prev_inactive;
 } Node;
 
 
@@ -32,13 +36,19 @@ typedef struct arc {
 } Arc;
 
 
+std::list<int> *inactive_layers;
+
+
 typedef struct layer {
+  std::deque<int> active;
   int first_active;
-  int first_inactive;
+  //std::list<int> inactive;
+
+  //int first_inactive;
 } Layer;
 
 
-static int work_since_update = INF;
+static int work_since_update;
 static int s;
 static int t;
 static PNEANet G;
@@ -94,32 +104,24 @@ static inline void remove_from_active_layer(int i) {
 
 static inline void add_to_inactive_layer(int i) {
   int layer = nodes[i].height;
-  nodes[i].next_inactive = layers[layer].first_inactive;
-  layers[layer].first_inactive = i;
-  nodes[nodes[i].next_inactive].prev_inactive = i;
+  inactive_layers[layer].push_front(i);
+  nodes[i].inactive_ptr = inactive_layers[layer].begin();
 }
 
 
 static inline void remove_from_inactive_layer(int i) {
   int layer = nodes[i].height;
-  if (layers[layer].first_inactive == i) {
-    layers[layer].first_inactive = nodes[i].next_inactive;
-  } else {
-    int next = nodes[i].next_inactive;
-    int prev = nodes[i].prev_inactive;
-    nodes[next].prev_inactive = prev;
-    nodes[prev].next_inactive = next;
-  }
+  inactive_layers[layer].erase(nodes[i].inactive_ptr);
 }
 
 
-static inline void global_relabel() {
+static void global_relabel() {
   static int *bfs_queue = (int *) malloc(num_nodes*sizeof(int));
 
   for (int i = 0; i < num_nodes; ++i) { nodes[i].height = num_nodes;  }
   for (int i = 0; i <= max_distance; ++i) {
     layers[i].first_active = -1;
-    layers[i].first_inactive = -1;
+    inactive_layers[i].clear();
   }
 
   max_active = max_distance = 0;
@@ -131,8 +133,7 @@ static inline void global_relabel() {
   int right = 1;
   bfs_queue[0] = t;
   while (left != right) {
-    int cur_node = bfs_queue[left];
-    left++;
+    int cur_node = bfs_queue[left++];
     NI = G->GetNI(cur_node);
     for (int i = 0; i < NI.GetInDeg(); ++i) {
       int prev_node = NI.GetInNId(i);
@@ -140,8 +141,7 @@ static inline void global_relabel() {
         int e_id = G->GetEId(prev_node, cur_node);
         if (arcs[e_id].capacity - arcs[e_id].flow > 0) {
           nodes[prev_node].height = nodes[cur_node].height + 1;
-          bfs_queue[right] = prev_node;
-          right++;
+          bfs_queue[right++] = prev_node;
 
           if (max_distance < nodes[prev_node].height) {
             max_distance = nodes[prev_node].height;
@@ -162,12 +162,11 @@ static inline void global_relabel() {
 static inline void push(int u, int v) {
   int e_id = G->GetEId(u,v);
   int rev_e_id = G->GetEId(v,u);
-  int f = arcs[e_id].flow;
-  int delta = arcs[e_id].capacity - f;
+  int delta = arcs[e_id].capacity - arcs[e_id].flow;
   int ex = nodes[u].excess;
   if (ex > delta) { ex = delta; }
-  arcs[e_id].flow = f + ex;
-  arcs[rev_e_id].flow = -(f + ex);
+  arcs[e_id].flow += ex;
+  arcs[rev_e_id].flow -= ex;
   nodes[u].excess -= ex;
   nodes[v].excess += ex;
 }
@@ -176,7 +175,8 @@ static inline void push(int u, int v) {
 static inline void relabel(int u) {
   work_since_update += beta;
   TNEANet::TNodeI NI = G->GetNI(u);
-  int min_neighbor = INF;
+  nodes[u].height = num_nodes;
+  int min_neighbor = num_nodes;
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
     work_since_update++;
     int v = NI.GetOutNId(i);
@@ -195,23 +195,16 @@ static inline void relabel(int u) {
 
 
 static inline void gap(int missing_height) {
-  for (int i = 0; i < num_nodes; ++i) {
-    if (nodes[i].height >= missing_height) {
-      nodes[i].height = num_nodes;
+  for (int h = missing_height + 1; h < max_distance; ++h) {
+    std::list<int>::iterator li;
+    for (li = inactive_layers[h].begin(); li != inactive_layers[h].end(); ++li) {
+      nodes[*li].height = num_nodes;
     }
+    inactive_layers[h].clear();
   }
-  /*
-  for (int cur_height = missing_height + 1; cur_height < max_distance; ++cur_height) {
-    int cur_node = layers[cur_height].first_inactive;
-    while (cur_node >= 0) {
-      nodes[cur_node].height = num_nodes;
-      cur_node = nodes[cur_node].next_inactive;
-    }
-    layers[cur_height].first_inactive = -1;
-  }*/
-  max_active = missing_height - 1;
   max_distance = missing_height - 1;
-  return;
+  max_active = max_distance;
+
 }
 
 
@@ -223,7 +216,7 @@ static inline void discharge(int u) {
       int e_id = G->GetEId(u,v);
       if (arcs[e_id].capacity - arcs[e_id].flow > 0) {
         if (nodes[u].height == nodes[v].height + 1) {
-          if (v != s && v != t && nodes[v].excess == 0) {
+          if (v != t && nodes[v].excess == 0) {
             remove_from_inactive_layer(v);
             add_to_active_layer(v);
           }
@@ -238,7 +231,7 @@ static inline void discharge(int u) {
     if (nodes[u].excess > 0) {
       int old_height = nodes[u].height;
       relabel(u);
-      if (layers[old_height].first_inactive < 0 && layers[old_height].first_active < 0) {
+      if (layers[old_height].first_active < 0 && inactive_layers[old_height].empty()) {
         gap(old_height);
       }
       if (nodes[u].height == num_nodes) { //IMPORTANT
@@ -246,8 +239,6 @@ static inline void discharge(int u) {
       }
     } else {
       add_to_inactive_layer(u);
-
-      //TODO: add_to_inactive_layer(u);
       break;
     }
   }
@@ -259,6 +250,8 @@ int push_relabel() {
 
   nodes = (Node *) calloc(num_nodes, sizeof(Node));
   layers = (Layer *) calloc(num_nodes, sizeof(Layer));
+  //layers = new Layer[num_nodes];
+  inactive_layers = new std::list<int>[num_nodes];
 
   for (int i = 0; i < num_nodes; ++i) { nodes[i].height = 1; }
   nodes[s].height = num_nodes;
@@ -266,7 +259,6 @@ int push_relabel() {
 
   for (int i = 0; i < num_nodes; ++i) {
     layers[i].first_active = -1;
-    layers[i].first_inactive = -1;
   }
 
   max_active = 0;
@@ -288,6 +280,7 @@ int push_relabel() {
       add_to_inactive_layer(i);
     }
   }
+  global_relabel();
 
   while (max_active >= min_active) {
     if (layers[max_active].first_active < 0) {
