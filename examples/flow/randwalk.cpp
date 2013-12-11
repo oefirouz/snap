@@ -38,6 +38,10 @@ void net_from_dimacs(char *filename) {
       if (!G->IsNode(a-1)) { G->AddNode(a-1); }
       if (!G->IsNode(b-1)) { G->AddNode(b-1); }
       if (!G->IsEdge(a-1,b-1)) { G->AddEdge(a-1,b-1); }
+      //DONT NEED REVERSE BECAUSE ITS NOT RESIDUAL< WILL USE PARTNER FOR THAT
+      /*if (a != 1) {
+        if (!G->IsEdge(b-1,a-1)) { G->AddEdge(b-1,a-1); }
+      }*/
     }
   }
   is_matched = (bool *) calloc(num_nodes,sizeof(bool));
@@ -89,9 +93,9 @@ static inline int rand_walk() {
         prev_walk_assigned[guy] = walk_id;
         prev_node[guy] = girl;
       }
-      if (guy == first_guy) {
+      /*if (guy == first_guy) {
         printf("ERROR THIS SHOULDN'T HAPPEN\n"); fflush(stdout);
-      }
+      }*/
     } else {
       guy = girl;
     }
@@ -142,7 +146,7 @@ void rand_walk_match() {
     if (rand_walk() == 1) {
       augment();
       num_matched++;
-      //printf("Num Matched %d\n", num_matched);
+      //printf("Num Matched %d\n", num_matched); fflush(stdout);
     }
   }
   for (int i = 1; i <= n; ++i) {
@@ -160,6 +164,7 @@ int main(int argc, char* argv[]) {
   char *filename = argv[1];
   G = PNEANet::New();
   net_from_dimacs(filename);
+  printf("File Loaded\n"); fflush(stdout);
 
   s = 0;
   t = num_nodes - 1;

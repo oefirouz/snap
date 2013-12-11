@@ -49,10 +49,11 @@ static Layer *layers;
 
 void net_from_dimacs(char *filename) {
   FILE *f = fopen(filename, "r");
-  if (f == NULL) { printf("Couldn't find file!\n"); return; }
+  if (f == NULL) { printf("Couldn't find file!\n"); exit(0); }
   int a, b, c, e_id, max_edges, max_nodes;
   char z, buf[1024];
   int *capacities;
+  //TODO: source/sink defined in DIMACS
   while (fgets(buf, 1024, f) != NULL) {
     if (buf[0] == 'p') {
       sscanf(buf, "p max %d %d", &max_nodes, &max_edges);
@@ -79,8 +80,16 @@ void net_from_dimacs(char *filename) {
 
 static inline void add_to_active_layer(int i) {
   int layer = nodes[i].height;
-  layers[layer].active.push_front(i);
-  nodes[i].list_ptr = layers[layer].active.begin();
+  //static bool flip = 0;
+  //if (flip == 0) {
+    layers[layer].active.push_front(i);
+    nodes[i].list_ptr = layers[layer].active.begin();
+  //} else {
+  /*  layers[layer].active.push_back(i);
+    nodes[i].list_ptr = layers[layer].active.end();
+    --nodes[i].list_ptr;
+  }
+  flip = 1 - flip;*/
   if (min_active > layer) { min_active = layer; }
   if (max_active < layer) { max_active = layer; }
 }
