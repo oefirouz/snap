@@ -1,5 +1,6 @@
 echo "Making SNAP Push-Relabel"
-make all
+make NAME=pushrelabel all
+make NAME=randwalk all
 
 echo "Making BOOST Push-Relabel"
 #g++ -O3 -I /usr/local/Cellar/boost/1.54.0/ boost_flow.cpp -o boost_flow
@@ -8,12 +9,19 @@ echo "Making BOOST Push-Relabel"
 for filename in "rmflong_8_64" "rmflong_10_91" "rmflong_11_128" "rmflong_13_181" \
 "rmflong_16_256" "rmflong_19_362" "rmflong_23_512" "rmflong_30_724" \
 "rmfwide_28_5" "rmfwide_37_6" "rmfwide_49_7" "rmfwide_64_8" "rmfwide_85_9" \
-"rmfwide_111_10" "rmfwide_147_12" "rmfwide_194_14"
+"rmfwide_111_10" "rmfwide_147_12" #"rmfwide_194_14"
 do
     printf $filename
     printf "\t"
     ./pushrelabel Tests/${filename}.txt
-    cat Tests/${filename}.txt | ./boost_flow
+    ./pushrelabel Tests/${filename}.txt
+    ./pushrelabel Tests/${filename}.txt
+    ./pushrelabel Tests/${filename}.txt
+    ./pushrelabel Tests/${filename}.txt
+    ./pushrelabel Tests/${filename}.txt
+    ./pushrelabel Tests/${filename}.txt
+    ./pushrelabel Tests/${filename}.txt
+    #cat Tests/${filename}.txt | ./boost_flow
     printf "\n"
 done
 

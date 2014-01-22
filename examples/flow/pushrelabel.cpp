@@ -41,7 +41,8 @@ typedef struct layer {
 static int work_since_update;
 static int s;
 static int t;
-static PNEANet G;
+//static PNEANet G;
+static PNGraph G;
 static Arc *arcs;
 static Node *nodes;
 static Layer *layers;
@@ -127,7 +128,9 @@ static void global_relabel() {
   min_active = num_nodes;
   nodes[t].height = 0;
 
-  TNEANet::TNodeI NI = G->GetNI(t);
+  //TNEANet::TNodeI NI = G->GetNI(t);
+  TNGraph::TNodeI NI = G->GetNI(t);
+
   int left = 0;
   int right = 1;
   bfs_queue[0] = t;
@@ -209,7 +212,8 @@ static inline void gap(int missing_height) {
 
 
 static inline void discharge(int u) {
-  TNEANet::TNodeI NI = G->GetNI(u);
+  //TNEANet::TNodeI NI = G->GetNI(u);
+  TNGraph::TNodeI NI = G->GetNI(u);
   while (1) {
     for (int i = 0; i < NI.GetOutDeg(); ++i) {
       int v = NI.GetOutNId(i);
@@ -232,7 +236,7 @@ static inline void discharge(int u) {
       int old_height = nodes[u].height;
       relabel(u);
       if (layers[old_height].active.empty() && layers[old_height].inactive.empty()) {
-        gap(old_height);
+        //gap(old_height);
       }
       if (nodes[u].height == num_nodes) { //IMPORTANT
         break;
@@ -258,7 +262,8 @@ int push_relabel() {
   max_distance = num_nodes - 1;
   nodes[s].excess = INF;
 
-  TNEANet::TNodeI NI = G->GetNI(s);
+  //TNEANet::TNodeI NI = G->GetNI(s);
+  TNGraph::TNodeI NI = G->GetNI(s);
   for (int i = 0; i < NI.GetOutDeg(); ++i) {
     v = NI.GetOutNId(i);
     int e_id = G->GetEId(s, v);
@@ -314,7 +319,7 @@ void reset() {
 int main(int argc, char* argv[]) {
   if (argc <= 1) { usage(); return 0; }
   char *filename = argv[1];
-  G = PNEANet::New();
+  G = PNGraph::New();
   net_from_dimacs(filename);
   normalized_size = alpha*num_nodes + num_edges/2;
 

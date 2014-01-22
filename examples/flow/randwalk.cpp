@@ -174,6 +174,12 @@ int main(int argc, char* argv[]) {
   clock_t end = clock();
   printf("%f\t", ((float)end - start)/CLOCKS_PER_SEC);
 
+  for (int i = 1; i <= n; ++i) {
+    if (! G->IsEdge(i, partner[i])) {
+      printf("MISTAKE %d %d is not EDGE\n", i, partner[i]);
+    }
+  }
+
   return 0;
 }
 
